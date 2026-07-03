@@ -36,6 +36,47 @@ export interface PostWithTranslations {
   }[];
 }
 
+// Translation types
+export interface TranslationData {
+  locale: string;
+  title: string;
+  content: string;
+  excerpt: string | null;
+}
+
+export interface CategoryTranslationData {
+  locale: string;
+  name: string;
+}
+
+export interface TagTranslationData {
+  locale: string;
+  name: string;
+}
+
+// Category and Tag types
+export interface CategoryWithTranslations {
+  id: number;
+  slug: string;
+  translations: CategoryTranslationData[];
+}
+
+export interface TagWithTranslations {
+  id: number;
+  slug: string;
+  translations: TagTranslationData[];
+}
+
+// Post update data type
+export interface PostUpdateData {
+  slug?: string;
+  coverImage?: string;
+  categoryId?: number;
+  published?: boolean;
+  publishedAt?: Date | null;
+  updatedAt?: Date;
+}
+
 // API Response types
 export interface ApiResponse<T = unknown> {
   success: boolean;

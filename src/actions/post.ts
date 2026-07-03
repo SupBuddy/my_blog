@@ -2,7 +2,7 @@
 
 import { db } from '@/db';
 import { posts, postTranslations, categories, categoryTranslations, tags, tagTranslations, postsToTags } from '@/db/schema';
-import { eq, and, desc, sql, lt } from 'drizzle-orm';
+import { eq, and, desc, lt } from 'drizzle-orm';
 import type { PostWithTranslations, Locale } from '@/lib/types';
 
 // 获取文章列表（带分页）

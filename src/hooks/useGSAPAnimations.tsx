@@ -37,7 +37,7 @@ export function PostListAnimations({ children }: GSAPAnimationsProps) {
   return <div ref={containerRef}>{children}</div>;
 }
 
-export function HeroAnimations() {
+export function HeroAnimations({ children }: GSAPAnimationsProps) {
   const heroRef = useRef<HTMLDivElement>(null);
 
   useGSAP(
@@ -61,5 +61,5 @@ export function HeroAnimations() {
     { scope: heroRef },
   );
 
-  return heroRef;
+  return <div ref={heroRef}>{children}</div>;
 }

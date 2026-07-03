@@ -1,10 +1,18 @@
-'use server';
+"use server";
 
-import { db } from '@/db';
-import { posts, postTranslations, categories, categoryTranslations, tags, tagTranslations, postsToTags } from '@/db/schema';
-import { eq, and, desc, inArray } from 'drizzle-orm';
-import { revalidatePath } from 'next/cache';
-import type { Locale } from '@/lib/types';
+import { db } from "@/db";
+import {
+  posts,
+  postTranslations,
+  categories,
+  categoryTranslations,
+  tags,
+  tagTranslations,
+  postsToTags,
+} from "@/db/schema";
+import { eq, and, desc } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
+import type { Locale, PostUpdateData } from "@/lib/types";
 
 // 创建新文章
 export async function createPost(data: {
@@ -22,13 +30,16 @@ export async function createPost(data: {
 }) {
   try {
     // 创建文章主表记录
-    const newPost = await db.insert(posts).values({
-      slug: data.slug,
-      coverImage: data.coverImage || null,
-      published: false, // 默认为草稿
-      categoryId: data.categoryId || null,
-      authorId: data.authorId || null,
-    }).returning();
+    const newPost = await db
+      .insert(posts)
+      .values({
+        slug: data.slug,
+        coverImage: data.coverImage || null,
+        published: false, // 默认为草稿
+        categoryId: data.categoryId || null,
+        authorId: data.authorId || null,
+      })
+      .returning();
 
     const postId = newPost[0].id;
 
@@ -53,34 +64,37 @@ export async function createPost(data: {
       }
     }
 
-    revalidatePath('/dashboard');
-    revalidatePath('/zh');
-    revalidatePath('/en');
+    revalidatePath("/dashboard");
+    revalidatePath("/zh");
+    revalidatePath("/en");
 
     return { success: true, data: newPost[0] };
   } catch (error) {
-    console.error('Error creating post:', error);
-    return { success: false, error: 'Failed to create post' };
+    console.error("Error creating post:", error);
+    return { success: false, error: "Failed to create post" };
   }
 }
 
 // 更新文章
-export async function updatePost(postId: number, data: {
-  slug?: string;
-  coverImage?: string;
-  categoryId?: number;
-  published?: boolean;
-  translations?: {
-    locale: Locale;
-    title: string;
-    content: string;
-    excerpt?: string;
-  }[];
-  tagIds?: number[];
-}) {
+export async function updatePost(
+  postId: number,
+  data: {
+    slug?: string;
+    coverImage?: string;
+    categoryId?: number;
+    published?: boolean;
+    translations?: {
+      locale: Locale;
+      title: string;
+      content: string;
+      excerpt?: string;
+    }[];
+    tagIds?: number[];
+  },
+) {
   try {
     // 更新文章主表
-    const updateData: any = {};
+    const updateData: PostUpdateData = {};
     if (data.slug) updateData.slug = data.slug;
     if (data.coverImage) updateData.coverImage = data.coverImage;
     if (data.categoryId) updateData.categoryId = data.categoryId;
@@ -100,10 +114,12 @@ export async function updatePost(postId: number, data: {
         const existing = await db
           .select()
           .from(postTranslations)
-          .where(and(
-            eq(postTranslations.postId, postId),
-            eq(postTranslations.locale, translation.locale)
-          ))
+          .where(
+            and(
+              eq(postTranslations.postId, postId),
+              eq(postTranslations.locale, translation.locale),
+            ),
+          )
           .limit(1);
 
         if (existing.length > 0) {
@@ -131,7 +147,7 @@ export async function updatePost(postId: number, data: {
     if (data.tagIds) {
       // 删除旧的关联
       await db.delete(postsToTags).where(eq(postsToTags.postId, postId));
-      
+
       // 创建新的关联
       for (const tagId of data.tagIds) {
         await db.insert(postsToTags).values({
@@ -141,14 +157,14 @@ export async function updatePost(postId: number, data: {
       }
     }
 
-    revalidatePath('/dashboard');
-    revalidatePath('/zh');
-    revalidatePath('/en');
+    revalidatePath("/dashboard");
+    revalidatePath("/zh");
+    revalidatePath("/en");
 
     return { success: true };
   } catch (error) {
-    console.error('Error updating post:', error);
-    return { success: false, error: 'Failed to update post' };
+    console.error("Error updating post:", error);
+    return { success: false, error: "Failed to update post" };
   }
 }
 
@@ -156,27 +172,32 @@ export async function updatePost(postId: number, data: {
 export async function deletePost(postId: number) {
   try {
     // 删除翻译记录
-    await db.delete(postTranslations).where(eq(postTranslations.postId, postId));
-    
+    await db
+      .delete(postTranslations)
+      .where(eq(postTranslations.postId, postId));
+
     // 删除标签关联
     await db.delete(postsToTags).where(eq(postsToTags.postId, postId));
-    
+
     // 删除文章
     await db.delete(posts).where(eq(posts.id, postId));
 
-    revalidatePath('/dashboard');
-    revalidatePath('/zh');
-    revalidatePath('/en');
+    revalidatePath("/dashboard");
+    revalidatePath("/zh");
+    revalidatePath("/en");
 
     return { success: true };
   } catch (error) {
-    console.error('Error deleting post:', error);
-    return { success: false, error: 'Failed to delete post' };
+    console.error("Error deleting post:", error);
+    return { success: false, error: "Failed to delete post" };
   }
 }
 
 // 发布/取消发布文章
-export async function togglePostPublishStatus(postId: number, published: boolean) {
+export async function togglePostPublishStatus(
+  postId: number,
+  published: boolean,
+) {
   try {
     await db
       .update(posts)
@@ -187,19 +208,19 @@ export async function togglePostPublishStatus(postId: number, published: boolean
       })
       .where(eq(posts.id, postId));
 
-    revalidatePath('/dashboard');
-    revalidatePath('/zh');
-    revalidatePath('/en');
+    revalidatePath("/dashboard");
+    revalidatePath("/zh");
+    revalidatePath("/en");
 
     return { success: true };
   } catch (error) {
-    console.error('Error toggling post status:', error);
-    return { success: false, error: 'Failed to toggle post status' };
+    console.error("Error toggling post status:", error);
+    return { success: false, error: "Failed to toggle post status" };
   }
 }
 
 // 获取后台文章列表（包括草稿）
-export async function getAdminPosts(locale: Locale = 'zh') {
+export async function getAdminPosts(locale: Locale = "zh") {
   try {
     const allPosts = await db
       .select()
@@ -214,7 +235,8 @@ export async function getAdminPosts(locale: Locale = 'zh') {
         .from(postTranslations)
         .where(eq(postTranslations.postId, post.id));
 
-      const translation = translations.find(t => t.locale === locale) || translations[0];
+      const translation =
+        translations.find((t) => t.locale === locale) || translations[0];
 
       let category = null;
       if (post.categoryId) {
@@ -233,7 +255,9 @@ export async function getAdminPosts(locale: Locale = 'zh') {
           category = {
             id: categoryData[0].id,
             slug: categoryData[0].slug,
-            name: categoryTrans.find(t => t.locale === locale)?.name || categoryTrans[0]?.name,
+            name:
+              categoryTrans.find((t) => t.locale === locale)?.name ||
+              categoryTrans[0]?.name,
           };
         }
       }
@@ -246,7 +270,7 @@ export async function getAdminPosts(locale: Locale = 'zh') {
         createdAt: post.createdAt,
         updatedAt: post.updatedAt,
         publishedAt: post.publishedAt,
-        title: translation?.title || 'Untitled',
+        title: translation?.title || "Untitled",
         excerpt: translation?.excerpt,
         category,
       });
@@ -254,8 +278,8 @@ export async function getAdminPosts(locale: Locale = 'zh') {
 
     return { success: true, data: postsWithDetails };
   } catch (error) {
-    console.error('Error fetching admin posts:', error);
-    return { success: false, error: 'Failed to fetch posts' };
+    console.error("Error fetching admin posts:", error);
+    return { success: false, error: "Failed to fetch posts" };
   }
 }
 
@@ -269,7 +293,7 @@ export async function getAdminPostById(postId: number) {
       .limit(1);
 
     if (post.length === 0) {
-      return { success: false, error: 'Post not found' };
+      return { success: false, error: "Post not found" };
     }
 
     const translations = await db
@@ -282,7 +306,7 @@ export async function getAdminPostById(postId: number) {
       .from(postsToTags)
       .where(eq(postsToTags.postId, postId));
 
-    const tagIds = postTags.map(pt => pt.tagId);
+    const tagIds = postTags.map((pt) => pt.tagId);
 
     return {
       success: true,
@@ -293,7 +317,7 @@ export async function getAdminPostById(postId: number) {
       },
     };
   } catch (error) {
-    console.error('Error fetching post:', error);
-    return { success: false, error: 'Failed to fetch post' };
+    console.error("Error fetching post:", error);
+    return { success: false, error: "Failed to fetch post" };
   }
 }
