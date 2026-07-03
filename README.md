@@ -233,6 +233,6 @@ MIT License
 
 ## 👨‍💻 作者
 
-由 [Your Name](https://github.com/SupBuddy) 开发维护。
+由 [SupBuddy](https://github.com/SupBuddy) 开发维护。
 
 如有问题或建议，欢迎提交 Issue 或 Pull Request！
