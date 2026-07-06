@@ -3,17 +3,58 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { getAdminPosts } from "@/actions/admin-post";
+import { getCategories } from "@/actions/admin-category";
 import { Plus, Edit, Trash2, Eye, EyeOff } from "lucide-react";
 import { formatDate } from "@/lib/utils";
+import { PostFilters } from "@/components/admin/PostFilters";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: {
+    categoryId?: string;
+    published?: string;
+  };
+}) {
   const { userId } = await auth();
 
   if (!userId) {
     redirect("/sign-in");
   }
 
-  const { success, data: posts } = await getAdminPosts("zh");
+  // 解析筛选参数 - 防止 NaN 问题
+  const categoryId = searchParams.categoryId
+    ? (() => {
+        const parsed = parseInt(searchParams.categoryId);
+        return isNaN(parsed) ? undefined : parsed;
+      })()
+    : undefined;
+
+  const published = searchParams.published
+    ? searchParams.published === "true"
+    : undefined;
+
+  const filters = {
+    categoryId,
+    published,
+  };
+
+  // 获取文章列表和分类列表
+  const { success, data: posts } = await getAdminPosts("zh", filters);
+  const { success: categoriesSuccess, data: categoriesData } =
+    await getCategories("zh");
+
+  // 准备分类列表（用于筛选器）
+  const categories =
+    categoriesSuccess && categoriesData
+      ? categoriesData.map((cat) => {
+          const zhTrans = cat.translations.find((t) => t.locale === "zh");
+          return {
+            id: cat.id,
+            name: zhTrans?.name || cat.slug,
+          };
+        })
+      : [];
 
   return (
     <div className="space-y-8">
@@ -34,14 +75,24 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
+      {/* 筛选器 - 始终显示 */}
+      <PostFilters categories={categories} />
+
       {!success || !posts || posts.length === 0 ? (
         <div className="text-center py-12 rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-          <p className="text-zinc-600 dark:text-zinc-400">暂无文章</p>
-          <Link href="/dashboard/posts/new" className="mt-4 inline-block">
-            <Button>创建第一篇文章</Button>
-          </Link>
+          <p className="text-zinc-600 dark:text-zinc-400">
+            {filters.categoryId || filters.published !== undefined
+              ? "没有符合条件的文章"
+              : "暂无文章"}
+          </p>
+          {!filters.categoryId && filters.published === undefined && (
+            <Link href="/dashboard/posts/new" className="mt-4 inline-block">
+              <Button>创建第一篇文章</Button>
+            </Link>
+          )}
         </div>
       ) : (
+        /* 文章列表 */
         <div className="rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 overflow-x-auto">
           <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-700">
             <thead className="bg-zinc-50 dark:bg-zinc-800">

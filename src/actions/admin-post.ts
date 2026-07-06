@@ -220,11 +220,33 @@ export async function togglePostPublishStatus(
 }
 
 // 获取后台文章列表（包括草稿）
-export async function getAdminPosts(locale: Locale = "zh") {
+export async function getAdminPosts(
+  locale: Locale = "zh",
+  filters?: {
+    categoryId?: number;
+    published?: boolean;
+  },
+) {
   try {
+    // 构建查询条件
+    const conditions = [];
+
+    if (filters?.categoryId !== undefined) {
+      conditions.push(eq(posts.categoryId, filters.categoryId));
+    }
+
+    if (filters?.published !== undefined) {
+      conditions.push(eq(posts.published, filters.published));
+    }
+
+    // 应用筛选条件
+    const whereCondition =
+      conditions.length > 0 ? and(...conditions) : undefined;
+
     const allPosts = await db
       .select()
       .from(posts)
+      .where(whereCondition)
       .orderBy(desc(posts.createdAt));
 
     const postsWithDetails = [];
