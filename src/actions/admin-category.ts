@@ -9,8 +9,9 @@ import {
   postsToTags,
 } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import type { Locale } from "@/lib/types";
+import { CACHE_TAGS, CACHE_TIMES } from "@/lib/cache-config";
 
 // ========== 分类管理 ==========
 
@@ -41,6 +42,9 @@ export async function createCategory(data: {
     }
 
     revalidatePath("/dashboard/categories");
+
+    // 清除分类缓存
+    revalidateTag(CACHE_TAGS.CATEGORIES);
 
     return { success: true, data: newCategory[0] };
   } catch (error) {
@@ -98,6 +102,9 @@ export async function updateCategory(
 
     revalidatePath("/dashboard/categories");
 
+    // 清除分类缓存
+    revalidateTag(CACHE_TAGS.CATEGORIES);
+
     return { success: true };
   } catch (error) {
     console.error("Error updating category:", error);
@@ -115,6 +122,9 @@ export async function deleteCategory(categoryId: number) {
 
     revalidatePath("/dashboard/categories");
 
+    // 清除分类缓存
+    revalidateTag(CACHE_TAGS.CATEGORIES);
+
     return { success: true };
   } catch (error) {
     console.error("Error deleting category:", error);
@@ -122,27 +132,47 @@ export async function deleteCategory(categoryId: number) {
   }
 }
 
-// 获取所有分类
+// 获取所有分类 - 内部查询函数
+async function getCategoriesQuery(locale: Locale = "zh") {
+  const allCategories = await db.select().from(categories);
+
+  const categoriesWithTranslations = [];
+
+  for (const category of allCategories) {
+    const translations = await db
+      .select()
+      .from(categoryTranslations)
+      .where(eq(categoryTranslations.categoryId, category.id));
+
+    categoriesWithTranslations.push({
+      ...category,
+      translations: translations.map((t) => ({
+        locale: t.locale,
+        name: t.name,
+      })),
+    });
+  }
+
+  return categoriesWithTranslations;
+}
+
+// 获取所有分类 - 带缓存
 export async function getCategories(locale: Locale = "zh") {
   try {
-    const allCategories = await db.select().from(categories);
+    // 生成缓存键
+    const cacheKey = ["categories", locale];
 
-    const categoriesWithTranslations = [];
+    // 使用缓存包装查询
+    const cachedQuery = unstable_cache(
+      () => getCategoriesQuery(locale),
+      cacheKey,
+      {
+        tags: [CACHE_TAGS.CATEGORIES],
+        revalidate: CACHE_TIMES.CATEGORIES,
+      },
+    );
 
-    for (const category of allCategories) {
-      const translations = await db
-        .select()
-        .from(categoryTranslations)
-        .where(eq(categoryTranslations.categoryId, category.id));
-
-      categoriesWithTranslations.push({
-        ...category,
-        translations: translations.map((t) => ({
-          locale: t.locale,
-          name: t.name,
-        })),
-      });
-    }
+    const categoriesWithTranslations = await cachedQuery();
 
     return { success: true, data: categoriesWithTranslations };
   } catch (error) {

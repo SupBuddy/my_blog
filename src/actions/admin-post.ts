@@ -11,8 +11,9 @@ import {
   postsToTags,
 } from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import type { Locale, PostUpdateData } from "@/lib/types";
+import { CACHE_TAGS, CACHE_TIMES } from "@/lib/cache-config";
 
 // 创建新文章
 export async function createPost(data: {
@@ -67,6 +68,10 @@ export async function createPost(data: {
     revalidatePath("/dashboard");
     revalidatePath("/zh");
     revalidatePath("/en");
+
+    // 清除文章相关缓存
+    revalidateTag(CACHE_TAGS.POSTS);
+    revalidateTag(CACHE_TAGS.POSTS_ADMIN);
 
     return { success: true, data: newPost[0] };
   } catch (error) {
@@ -161,6 +166,10 @@ export async function updatePost(
     revalidatePath("/zh");
     revalidatePath("/en");
 
+    // 清除文章相关缓存
+    revalidateTag(CACHE_TAGS.POSTS);
+    revalidateTag(CACHE_TAGS.POSTS_ADMIN);
+
     return { success: true };
   } catch (error) {
     console.error("Error updating post:", error);
@@ -185,6 +194,10 @@ export async function deletePost(postId: number) {
     revalidatePath("/dashboard");
     revalidatePath("/zh");
     revalidatePath("/en");
+
+    // 清除文章相关缓存
+    revalidateTag(CACHE_TAGS.POSTS);
+    revalidateTag(CACHE_TAGS.POSTS_ADMIN);
 
     return { success: true };
   } catch (error) {
@@ -212,6 +225,10 @@ export async function togglePostPublishStatus(
     revalidatePath("/zh");
     revalidatePath("/en");
 
+    // 清除文章相关缓存
+    revalidateTag(CACHE_TAGS.POSTS);
+    revalidateTag(CACHE_TAGS.POSTS_ADMIN);
+
     return { success: true };
   } catch (error) {
     console.error("Error toggling post status:", error);
@@ -219,7 +236,87 @@ export async function togglePostPublishStatus(
   }
 }
 
-// 获取后台文章列表（包括草稿）
+// 获取后台文章列表（包括草稿）- 带缓存
+async function getAdminPostsQuery(
+  locale: Locale = "zh",
+  filters?: {
+    categoryId?: number;
+    published?: boolean;
+  },
+) {
+  // 构建查询条件
+  const conditions = [];
+
+  if (filters?.categoryId !== undefined) {
+    conditions.push(eq(posts.categoryId, filters.categoryId));
+  }
+
+  if (filters?.published !== undefined) {
+    conditions.push(eq(posts.published, filters.published));
+  }
+
+  // 应用筛选条件
+  const whereCondition = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const allPosts = await db
+    .select()
+    .from(posts)
+    .where(whereCondition)
+    .orderBy(desc(posts.createdAt));
+
+  const postsWithDetails = [];
+
+  for (const post of allPosts) {
+    const translations = await db
+      .select()
+      .from(postTranslations)
+      .where(eq(postTranslations.postId, post.id));
+
+    const translation =
+      translations.find((t) => t.locale === locale) || translations[0];
+
+    let category = null;
+    if (post.categoryId) {
+      const categoryData = await db
+        .select()
+        .from(categories)
+        .where(eq(categories.id, post.categoryId))
+        .limit(1);
+
+      if (categoryData.length > 0) {
+        const categoryTrans = await db
+          .select()
+          .from(categoryTranslations)
+          .where(eq(categoryTranslations.categoryId, categoryData[0].id));
+
+        category = {
+          id: categoryData[0].id,
+          slug: categoryData[0].slug,
+          name:
+            categoryTrans.find((t) => t.locale === locale)?.name ||
+            categoryTrans[0]?.name,
+        };
+      }
+    }
+
+    postsWithDetails.push({
+      id: post.id,
+      slug: post.slug,
+      coverImage: post.coverImage,
+      published: post.published,
+      createdAt: post.createdAt,
+      updatedAt: post.updatedAt,
+      publishedAt: post.publishedAt,
+      title: translation?.title || "Untitled",
+      excerpt: translation?.excerpt,
+      category,
+    });
+  }
+
+  return postsWithDetails;
+}
+
+// 缓存的文章列表查询函数
 export async function getAdminPosts(
   locale: Locale = "zh",
   filters?: {
@@ -228,75 +325,25 @@ export async function getAdminPosts(
   },
 ) {
   try {
-    // 构建查询条件
-    const conditions = [];
+    // 生成缓存键
+    const cacheKey = [
+      "admin-posts",
+      locale,
+      filters?.categoryId?.toString() || "all",
+      filters?.published?.toString() || "all",
+    ];
 
-    if (filters?.categoryId !== undefined) {
-      conditions.push(eq(posts.categoryId, filters.categoryId));
-    }
+    // 使用缓存包装查询
+    const cachedQuery = unstable_cache(
+      () => getAdminPostsQuery(locale, filters),
+      cacheKey,
+      {
+        tags: [CACHE_TAGS.POSTS_ADMIN, CACHE_TAGS.POSTS],
+        revalidate: CACHE_TIMES.POSTS_ADMIN,
+      },
+    );
 
-    if (filters?.published !== undefined) {
-      conditions.push(eq(posts.published, filters.published));
-    }
-
-    // 应用筛选条件
-    const whereCondition =
-      conditions.length > 0 ? and(...conditions) : undefined;
-
-    const allPosts = await db
-      .select()
-      .from(posts)
-      .where(whereCondition)
-      .orderBy(desc(posts.createdAt));
-
-    const postsWithDetails = [];
-
-    for (const post of allPosts) {
-      const translations = await db
-        .select()
-        .from(postTranslations)
-        .where(eq(postTranslations.postId, post.id));
-
-      const translation =
-        translations.find((t) => t.locale === locale) || translations[0];
-
-      let category = null;
-      if (post.categoryId) {
-        const categoryData = await db
-          .select()
-          .from(categories)
-          .where(eq(categories.id, post.categoryId))
-          .limit(1);
-
-        if (categoryData.length > 0) {
-          const categoryTrans = await db
-            .select()
-            .from(categoryTranslations)
-            .where(eq(categoryTranslations.categoryId, categoryData[0].id));
-
-          category = {
-            id: categoryData[0].id,
-            slug: categoryData[0].slug,
-            name:
-              categoryTrans.find((t) => t.locale === locale)?.name ||
-              categoryTrans[0]?.name,
-          };
-        }
-      }
-
-      postsWithDetails.push({
-        id: post.id,
-        slug: post.slug,
-        coverImage: post.coverImage,
-        published: post.published,
-        createdAt: post.createdAt,
-        updatedAt: post.updatedAt,
-        publishedAt: post.publishedAt,
-        title: translation?.title || "Untitled",
-        excerpt: translation?.excerpt,
-        category,
-      });
-    }
+    const postsWithDetails = await cachedQuery();
 
     return { success: true, data: postsWithDetails };
   } catch (error) {
